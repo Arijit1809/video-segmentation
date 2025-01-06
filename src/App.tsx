@@ -17,7 +17,7 @@ function App() {
       )
       const imageSegmenter = await ImageSegmenter.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/1/deeplab_v3.tflite",
+          modelAssetPath: "/selfie_segmenter_landscape.tflite",  // Using local file from public folder
           delegate: "GPU"
         },
         runningMode: "VIDEO",
@@ -76,7 +76,7 @@ function App() {
 
         for (let i = 0; i < mask.length; i++) {
           const pixelIndex = i * 4
-          if (mask[i] < 0.052) {  // Background
+          if (mask[i] > 0) {  // Background
             outputPixels[pixelIndex] = 255     // Red (R)
             outputPixels[pixelIndex + 1] = 0   // Green (G)
             outputPixels[pixelIndex + 2] = 0   // Blue (B)
