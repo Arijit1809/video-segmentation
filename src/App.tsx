@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision'
+import { Canvas, useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
 import './App.scss'
+import { OrbitControls } from '@react-three/drei'
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)  // For the mask overlay
-  const outputCanvasRef = useRef<HTMLCanvasElement>(null)   // For the segmented output
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
+  const outputCanvasRef = useRef<HTMLCanvasElement>(null)
+  // const textureRef = useRef<THREE.CanvasTexture | null>(null)
   const [segmenter, setSegmenter] = useState<ImageSegmenter | null>(null)
   const [hasPermission, setHasPermission] = useState(false)
+
+  const [canvasTexture, setCanvasTexture] = useState<THREE.CanvasTexture | null>(null)
+
+  const masterFactor = 2
 
   // Initialize the ImageSegmenter
   useEffect(() => {
@@ -28,6 +36,83 @@ function App() {
     }
     initializeSegmenter()
   }, [])
+
+  // Update texture every frame
+  const Scene = () => {
+    // Create initial positions and speeds
+    const count = 50
+    const positions = useMemo(() => {
+      const temp = new Float32Array(count * 3)
+      for (let i = 0; i < count; i++) {
+        temp[i * 3] = (Math.random() - 0.5) * 4     // x
+        temp[i * 3 + 1] = (Math.random() - 0.5) * 4 // y
+        temp[i * 3 + 2] = Math.random() < 0.5 ? -2 : 2 // z
+      }
+      return temp
+    }, [])
+
+    const speeds = useMemo(() =>
+      Array(count).fill(0).map(() => ({
+        x: (Math.random() - 0.5) * 0.02,
+        y: (Math.random() - 0.5) * 0.02
+      })),
+      [])
+
+    useEffect(() => {
+      // Set initial positions for each instance
+      const matrix = new THREE.Matrix4()
+
+      for (let i = 0; i < count; i++) {
+        matrix.setPosition(
+          positions[i * 3],
+          positions[i * 3 + 1],
+          positions[i * 3 + 2]
+        )
+        instancedMeshRef.current.setMatrixAt(i, matrix)
+      }
+      instancedMeshRef.current.instanceMatrix.needsUpdate = true
+    }, [])
+
+    useFrame(() => {
+      if (canvasTexture) {
+        canvasTexture.needsUpdate = true
+      }
+
+      // Update positions
+      const matrix = new THREE.Matrix4()
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] += speeds[i].x
+        positions[i * 3 + 1] += speeds[i].y
+
+        // Bounce off boundaries
+        if (Math.abs(positions[i * 3]) > 2) speeds[i].x *= -1
+        if (Math.abs(positions[i * 3 + 1]) > 2) speeds[i].y *= -1
+
+        matrix.setPosition(
+          positions[i * 3],
+          positions[i * 3 + 1],
+          positions[i * 3 + 2]
+        )
+        instancedMeshRef.current.setMatrixAt(i, matrix)
+      }
+      instancedMeshRef.current.instanceMatrix.needsUpdate = true
+    })
+
+    const instancedMeshRef = useRef<THREE.InstancedMesh>(null!)
+    const factor = 0.9
+
+    return (
+      <>
+        <mesh position={[0, 0, 0]}>
+          <planeGeometry args={[16 * factor, 9 * factor]} />
+          <meshBasicMaterial side={THREE.DoubleSide} color="white" map={canvasTexture || undefined} transparent />
+        </mesh>
+
+        <instancedMesh ref={instancedMeshRef} args={[new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({ color: 'red' }), count]}>
+        </instancedMesh>
+      </>
+    )
+  }
 
   const startCamera = async () => {
     try {
@@ -106,12 +191,16 @@ function App() {
   }, [segmenter])
 
   const toggleProcessing = () => {
-    processFrame()
+    if (outputCanvasRef.current) {
+      const tex = new THREE.CanvasTexture(outputCanvasRef.current)
+      setCanvasTexture(tex)
+      processFrame()
+    }
   }
 
   return (
-    <div className='min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4'>
-      <div className='space-y-4 text-center'>
+    <div className='min-h-screen bg-gray-900 flex flex-col items-center justify-center'>
+      <div className=' text-center'>
         <button
           onClick={startCamera}
           disabled={hasPermission}
@@ -130,9 +219,9 @@ function App() {
         )}
       </div>
 
-      <div className='mt-8 flex gap-4'>
+      <div className='flex gap-4'>
         {/* Original Video with Overlay */}
-        <div className='relative w-[640px] h-[480px] rounded-lg overflow-hidden bg-black/20'>
+        <div className={`relative w-[480px] h-[270px] rounded-lg overflow-hidden bg-black/20`}>
           <video
             ref={videoRef}
             autoPlay
@@ -146,13 +235,20 @@ function App() {
         </div>
 
         {/* Processed Output */}
-        <div className='relative w-[640px] h-[480px] rounded-lg overflow-hidden bg-red-500'>
+        <div className={`relative w-[480px] h-[270px] rounded-lg overflow-hidden bg-red-500`}>
           <canvas
             ref={outputCanvasRef}
             className='absolute w-full h-full object-contain'
-          >
-          </canvas>
+          />
         </div>
+      </div>
+
+      {/* R3F Canvas */}
+      <div className={`mt-4 w-[480px] h-[270px] rounded-lg overflow-hidden`}>
+        <Canvas>
+          <OrbitControls />
+          <Scene />
+        </Canvas>
       </div>
     </div>
   )
