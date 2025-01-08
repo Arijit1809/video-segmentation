@@ -9,14 +9,13 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const outputCanvasRef = useRef<HTMLCanvasElement>(null)
+  const outputBgRef = useRef<HTMLCanvasElement>(null)
   // const textureRef = useRef<THREE.CanvasTexture | null>(null)
   const [segmenter, setSegmenter] = useState<ImageSegmenter | null>(null)
   const [hasPermission, setHasPermission] = useState(false)
 
   const [canvasTexture, setCanvasTexture] = useState<THREE.CanvasTexture | null>(null)
-
-  const masterFactor = 2
-
+  const [canvasBgTexture, setCanvasBgTexture] = useState<THREE.CanvasTexture | null>(null)
   // Initialize the ImageSegmenter
   useEffect(() => {
     const initializeSegmenter = async () => {
@@ -44,17 +43,34 @@ function App() {
     const positions = useMemo(() => {
       const temp = new Float32Array(count * 3)
       for (let i = 0; i < count; i++) {
-        temp[i * 3] = (Math.random() - 0.5) * 4     // x
-        temp[i * 3 + 1] = (Math.random() - 0.5) * 4 // y
-        temp[i * 3 + 2] = Math.random() < 0.5 ? -2 : 2 // z
+        temp[i * 3] = (Math.random() - 0.5) * 14     // x
+        temp[i * 3 + 1] = (Math.random() - 0.5) * 8 // y
+        temp[i * 3 + 2] = -1 // z
       }
       return temp
     }, [])
 
     const speeds = useMemo(() =>
       Array(count).fill(0).map(() => ({
-        x: (Math.random() - 0.5) * 0.02,
-        y: (Math.random() - 0.5) * 0.02
+        x: (Math.random() - 0.5) * 0.06,
+        y: (Math.random() - 0.5) * 0.06
+      })),
+      [])
+
+    const positions2 = useMemo(() => {
+      const temp = new Float32Array(count * 3)
+      for (let i = 0; i < count; i++) {
+        temp[i * 3] = (Math.random() - 0.5) * 14     // x
+        temp[i * 3 + 1] = (Math.random() - 0.5) * 8 // y
+        temp[i * 3 + 2] = 1 // z
+      }
+      return temp
+    }, [])
+
+    const speeds2 = useMemo(() =>
+      Array(count).fill(0).map(() => ({
+        x: (Math.random() - 0.5) * 0.06,
+        y: (Math.random() - 0.5) * 0.06
       })),
       [])
 
@@ -71,11 +87,22 @@ function App() {
         instancedMeshRef.current.setMatrixAt(i, matrix)
       }
       instancedMeshRef.current.instanceMatrix.needsUpdate = true
+
+      for (let i = 0; i < count; i++) {
+        matrix.setPosition(
+          positions2[i * 3],
+          positions2[i * 3 + 1],
+          positions2[i * 3 + 2]
+        )
+        instancedMeshRef2.current.setMatrixAt(i, matrix)
+      }
+      instancedMeshRef2.current.instanceMatrix.needsUpdate = true
     }, [])
 
     useFrame(() => {
-      if (canvasTexture) {
+      if (canvasTexture && canvasBgTexture) {
         canvasTexture.needsUpdate = true
+        canvasBgTexture.needsUpdate = true
       }
 
       // Update positions
@@ -85,8 +112,8 @@ function App() {
         positions[i * 3 + 1] += speeds[i].y
 
         // Bounce off boundaries
-        if (Math.abs(positions[i * 3]) > 2) speeds[i].x *= -1
-        if (Math.abs(positions[i * 3 + 1]) > 2) speeds[i].y *= -1
+        if (Math.abs(positions[i * 3]) > 14) speeds[i].x *= -1
+        if (Math.abs(positions[i * 3 + 1]) > 8) speeds[i].y *= -1
 
         matrix.setPosition(
           positions[i * 3],
@@ -96,19 +123,42 @@ function App() {
         instancedMeshRef.current.setMatrixAt(i, matrix)
       }
       instancedMeshRef.current.instanceMatrix.needsUpdate = true
+
+      for (let i = 0; i < count; i++) {
+        positions2[i * 3] += speeds2[i].x
+        positions2[i * 3 + 1] += speeds2[i].y
+
+        // Bounce off boundaries
+        if (Math.abs(positions2[i * 3]) > 14) speeds2[i].x *= -1
+        if (Math.abs(positions2[i * 3 + 1]) > 8) speeds2[i].y *= -1
+
+        matrix.setPosition(
+          positions2[i * 3],
+          positions2[i * 3 + 1],
+          positions2[i * 3 + 2]
+        )
+        instancedMeshRef2.current.setMatrixAt(i, matrix)
+      }
+      instancedMeshRef2.current.instanceMatrix.needsUpdate = true
     })
 
     const instancedMeshRef = useRef<THREE.InstancedMesh>(null!)
+    const instancedMeshRef2 = useRef<THREE.InstancedMesh>(null!)
     const factor = 0.9
 
     return (
       <>
         <mesh position={[0, 0, 0]}>
-          <planeGeometry args={[16 * factor, 9 * factor]} />
+          <planeGeometry args={[16, 9]} />
           <meshBasicMaterial side={THREE.DoubleSide} color="white" map={canvasTexture || undefined} transparent />
         </mesh>
-
-        <instancedMesh ref={instancedMeshRef} args={[new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({ color: 'red' }), count]}>
+        <mesh position={[0, 0, -1.3]}>
+          <planeGeometry args={[16, 9]} />
+          <meshBasicMaterial side={THREE.DoubleSide} color="white" map={canvasBgTexture || undefined} transparent opacity={1} />
+        </mesh>
+        <instancedMesh ref={instancedMeshRef} args={[new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({ color: 'red', transparent: true, opacity: 1 }), count]}>
+        </instancedMesh>
+        <instancedMesh ref={instancedMeshRef2} args={[new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({ color: 'green', transparent: true, opacity: 0.5 }), count]}>
         </instancedMesh>
       </>
     )
@@ -128,11 +178,12 @@ function App() {
   }
 
   const processFrame = () => {
-    if (!videoRef.current || !overlayCanvasRef.current || !outputCanvasRef.current || !segmenter || !hasPermission) return
+    if (!videoRef.current || !overlayCanvasRef.current || !outputCanvasRef.current || !outputBgRef.current || !segmenter || !hasPermission) return
 
     const overlayCtx = overlayCanvasRef.current.getContext('2d', { willReadFrequently: true })
     const outputCtx = outputCanvasRef.current.getContext('2d', { willReadFrequently: true })
-    if (!overlayCtx || !outputCtx) return
+    const outputBgCtx = outputBgRef.current.getContext('2d', { willReadFrequently: true })
+    if (!overlayCtx || !outputCtx || !outputBgCtx) return
 
     // Set canvas sizes to match video
     const width = videoRef.current.videoWidth
@@ -141,11 +192,13 @@ function App() {
     overlayCanvasRef.current.height = height
     outputCanvasRef.current.width = width
     outputCanvasRef.current.height = height
+    outputBgRef.current.width = width
+    outputBgRef.current.height = height
 
     // Draw original video frame to both canvases
     overlayCtx.drawImage(videoRef.current, 0, 0)
     outputCtx.drawImage(videoRef.current, 0, 0)
-
+    outputBgCtx.drawImage(videoRef.current, 0, 0)
     try {
       // Process frame with MediaPipe
       const segmentation = segmenter.segmentForVideo(videoRef.current, performance.now())
@@ -157,7 +210,9 @@ function App() {
         // Process output canvas (transparent background)
         if (!mask) return
         const outputImageData = outputCtx.getImageData(0, 0, width, height)
+        const outputBgImageData = outputBgCtx.getImageData(0, 0, width, height)
         const outputPixels = outputImageData.data
+        const outputBgPixels = outputBgImageData.data
 
         for (let i = 0; i < mask.length; i++) {
           const pixelIndex = i * 4
@@ -168,8 +223,17 @@ function App() {
             outputPixels[pixelIndex + 3] = 0 // Alpha (semi-transparent)
           }
         }
+        for (let i = 0; i < mask.length; i++) {
+          const pixelIndex = i * 4
+          if (mask[i] === 0) {  // Background
+            outputBgPixels[pixelIndex] = 255     // Red (R)
+            outputBgPixels[pixelIndex + 1] = 0   // Green (G)
+            outputBgPixels[pixelIndex + 2] = 0   // Blue (B)
+            outputBgPixels[pixelIndex + 3] = 0 // Alpha (semi-transparent)
+          }
+        }
         outputCtx.putImageData(outputImageData, 0, 0)
-
+        outputBgCtx.putImageData(outputBgImageData, 0, 0)
         // Clean up resources
         segmentation.close()
       }
@@ -191,9 +255,19 @@ function App() {
   }, [segmenter])
 
   const toggleProcessing = () => {
-    if (outputCanvasRef.current) {
+    if (outputCanvasRef.current && outputBgRef.current) {
       const tex = new THREE.CanvasTexture(outputCanvasRef.current)
+      const bgTex = new THREE.CanvasTexture(outputBgRef.current)
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      tex.format = THREE.RGBAFormat
+      tex.needsUpdate = true
       setCanvasTexture(tex)
+      bgTex.minFilter = THREE.LinearFilter
+      bgTex.magFilter = THREE.LinearFilter
+      bgTex.format = THREE.RGBAFormat
+      bgTex.needsUpdate = true
+      setCanvasBgTexture(bgTex)
       processFrame()
     }
   }
@@ -238,6 +312,10 @@ function App() {
         <div className={`relative w-[480px] h-[270px] rounded-lg overflow-hidden bg-red-500`}>
           <canvas
             ref={outputCanvasRef}
+            className='absolute w-full h-full object-contain invisible'
+          />
+          <canvas
+            ref={outputBgRef}
             className='absolute w-full h-full object-contain'
           />
         </div>
@@ -245,8 +323,12 @@ function App() {
 
       {/* R3F Canvas */}
       <div className={`mt-4 w-[480px] h-[270px] rounded-lg overflow-hidden`}>
-        <Canvas>
+        <Canvas
+          orthographic
+          camera={{ zoom: 30, position: [0, 0, 2] }}
+        >
           <OrbitControls />
+          <ambientLight intensity={2} />
           <Scene />
         </Canvas>
       </div>
