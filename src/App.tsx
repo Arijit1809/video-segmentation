@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -7,7 +7,6 @@ import { OrbitControls } from '@react-three/drei'
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const outputCanvasRef = useRef<HTMLCanvasElement>(null)
   const outputBgRef = useRef<HTMLCanvasElement>(null)
   // const textureRef = useRef<THREE.CanvasTexture | null>(null)
@@ -38,128 +37,26 @@ function App() {
 
   // Update texture every frame
   const Scene = () => {
-    // Create initial positions and speeds
-    const count = 50
-    const positions = useMemo(() => {
-      const temp = new Float32Array(count * 3)
-      for (let i = 0; i < count; i++) {
-        temp[i * 3] = (Math.random() - 0.5) * 14     // x
-        temp[i * 3 + 1] = (Math.random() - 0.5) * 8 // y
-        temp[i * 3 + 2] = -1 // z
-      }
-      return temp
-    }, [])
-
-    const speeds = useMemo(() =>
-      Array(count).fill(0).map(() => ({
-        x: (Math.random() - 0.5) * 0.06,
-        y: (Math.random() - 0.5) * 0.06
-      })),
-      [])
-
-    const positions2 = useMemo(() => {
-      const temp = new Float32Array(count * 3)
-      for (let i = 0; i < count; i++) {
-        temp[i * 3] = (Math.random() - 0.5) * 14     // x
-        temp[i * 3 + 1] = (Math.random() - 0.5) * 8 // y
-        temp[i * 3 + 2] = 1 // z
-      }
-      return temp
-    }, [])
-
-    const speeds2 = useMemo(() =>
-      Array(count).fill(0).map(() => ({
-        x: (Math.random() - 0.5) * 0.06,
-        y: (Math.random() - 0.5) * 0.06
-      })),
-      [])
-
-    useEffect(() => {
-      // Set initial positions for each instance
-      const matrix = new THREE.Matrix4()
-
-      for (let i = 0; i < count; i++) {
-        matrix.setPosition(
-          positions[i * 3],
-          positions[i * 3 + 1],
-          positions[i * 3 + 2]
-        )
-        instancedMeshRef.current.setMatrixAt(i, matrix)
-      }
-      instancedMeshRef.current.instanceMatrix.needsUpdate = true
-
-      for (let i = 0; i < count; i++) {
-        matrix.setPosition(
-          positions2[i * 3],
-          positions2[i * 3 + 1],
-          positions2[i * 3 + 2]
-        )
-        instancedMeshRef2.current.setMatrixAt(i, matrix)
-      }
-      instancedMeshRef2.current.instanceMatrix.needsUpdate = true
-    }, [])
-
     useFrame(() => {
       if (canvasTexture && canvasBgTexture) {
         canvasTexture.needsUpdate = true
         canvasBgTexture.needsUpdate = true
       }
-
-      // Update positions
-      const matrix = new THREE.Matrix4()
-      for (let i = 0; i < count; i++) {
-        positions[i * 3] += speeds[i].x
-        positions[i * 3 + 1] += speeds[i].y
-
-        // Bounce off boundaries
-        if (Math.abs(positions[i * 3]) > 14) speeds[i].x *= -1
-        if (Math.abs(positions[i * 3 + 1]) > 8) speeds[i].y *= -1
-
-        matrix.setPosition(
-          positions[i * 3],
-          positions[i * 3 + 1],
-          positions[i * 3 + 2]
-        )
-        instancedMeshRef.current.setMatrixAt(i, matrix)
-      }
-      instancedMeshRef.current.instanceMatrix.needsUpdate = true
-
-      for (let i = 0; i < count; i++) {
-        positions2[i * 3] += speeds2[i].x
-        positions2[i * 3 + 1] += speeds2[i].y
-
-        // Bounce off boundaries
-        if (Math.abs(positions2[i * 3]) > 14) speeds2[i].x *= -1
-        if (Math.abs(positions2[i * 3 + 1]) > 8) speeds2[i].y *= -1
-
-        matrix.setPosition(
-          positions2[i * 3],
-          positions2[i * 3 + 1],
-          positions2[i * 3 + 2]
-        )
-        instancedMeshRef2.current.setMatrixAt(i, matrix)
-      }
-      instancedMeshRef2.current.instanceMatrix.needsUpdate = true
     })
-
-    const instancedMeshRef = useRef<THREE.InstancedMesh>(null!)
-    const instancedMeshRef2 = useRef<THREE.InstancedMesh>(null!)
-    const factor = 0.9
 
     return (
       <>
         <mesh position={[0, 0, 0]}>
           <planeGeometry args={[16, 9]} />
-          <meshBasicMaterial side={THREE.DoubleSide} color="white" map={canvasTexture || undefined} transparent />
+          <meshBasicMaterial side={THREE.DoubleSide} map={canvasTexture || undefined} transparent />
         </mesh>
         <mesh position={[0, 0, -1.3]}>
           <planeGeometry args={[16, 9]} />
-          <meshBasicMaterial side={THREE.DoubleSide} color="white" map={canvasBgTexture || undefined} transparent opacity={1} />
+          <meshBasicMaterial side={THREE.DoubleSide} map={canvasBgTexture || undefined} transparent opacity={1} />
         </mesh>
-        <instancedMesh ref={instancedMeshRef} args={[new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({ color: 'red', transparent: true, opacity: 1 }), count]}>
-        </instancedMesh>
-        <instancedMesh ref={instancedMeshRef2} args={[new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({ color: 'green', transparent: true, opacity: 0.5 }), count]}>
-        </instancedMesh>
+
+        {/* <MovingSpheres count={100} z={-1} color="red" opacity={1} /> */}
+        {/* <MovingSpheres count={100} z={1} color="green" opacity={0.5} /> */}
       </>
     )
   }
@@ -178,25 +75,21 @@ function App() {
   }
 
   const processFrame = () => {
-    if (!videoRef.current || !overlayCanvasRef.current || !outputCanvasRef.current || !outputBgRef.current || !segmenter || !hasPermission) return
+    if (!videoRef.current || !outputCanvasRef.current || !outputBgRef.current || !segmenter || !hasPermission) return
 
-    const overlayCtx = overlayCanvasRef.current.getContext('2d', { willReadFrequently: true })
     const outputCtx = outputCanvasRef.current.getContext('2d', { willReadFrequently: true })
     const outputBgCtx = outputBgRef.current.getContext('2d', { willReadFrequently: true })
-    if (!overlayCtx || !outputCtx || !outputBgCtx) return
+    if (!outputCtx || !outputBgCtx) return
 
     // Set canvas sizes to match video
     const width = videoRef.current.videoWidth
     const height = videoRef.current.videoHeight
-    overlayCanvasRef.current.width = width
-    overlayCanvasRef.current.height = height
     outputCanvasRef.current.width = width
     outputCanvasRef.current.height = height
     outputBgRef.current.width = width
     outputBgRef.current.height = height
 
     // Draw original video frame to both canvases
-    overlayCtx.drawImage(videoRef.current, 0, 0)
     outputCtx.drawImage(videoRef.current, 0, 0)
     outputBgCtx.drawImage(videoRef.current, 0, 0)
     try {
@@ -204,8 +97,6 @@ function App() {
       const segmentation = segmenter.segmentForVideo(videoRef.current, performance.now())
       const mask = segmentation.categoryMask?.getAsFloat32Array()
       if (segmentation) {
-        // Process overlay canvas (red mask)
-        // processSegmentationResults(segmentation, overlayCtx, width, height)
 
         // Process output canvas (transparent background)
         if (!mask) return
@@ -302,10 +193,6 @@ function App() {
             playsInline
             className='absolute w-full h-full object-contain'
           />
-          <canvas
-            ref={overlayCanvasRef}
-            className='absolute w-full h-full object-contain'
-          />
         </div>
 
         {/* Processed Output */}
@@ -328,7 +215,7 @@ function App() {
           camera={{ zoom: 30, position: [0, 0, 2] }}
         >
           <OrbitControls />
-          <ambientLight intensity={2} />
+          <ambientLight intensity={10} />
           <Scene />
         </Canvas>
       </div>
