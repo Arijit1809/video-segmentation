@@ -1,26 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision'
+import { ImageSegmenter, FilesetResolver, GestureRecognizer } from '@mediapipe/tasks-vision'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import './App.scss'
 import { OrbitControls } from '@react-three/drei'
+import ExplosionConfetti from './Confetti'
 
+let frame = 0
+import { MovingSpheres } from './MovingSpheres'
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const outputCanvasRef = useRef<HTMLCanvasElement>(null)
   const outputBgRef = useRef<HTMLCanvasElement>(null)
   // const textureRef = useRef<THREE.CanvasTexture | null>(null)
   const [segmenter, setSegmenter] = useState<ImageSegmenter | null>(null)
+  const [gestureRecognizer, setGestureRecognizer] = useState<GestureRecognizer | null>(null)
   const [hasPermission, setHasPermission] = useState(false)
 
   const [canvasTexture, setCanvasTexture] = useState<THREE.CanvasTexture | null>(null)
   const [canvasBgTexture, setCanvasBgTexture] = useState<THREE.CanvasTexture | null>(null)
+
+  const [gLeft, setGLeft] = useState('');
+  const [gRight, setGRight] = useState('');
+
+  const [isProcessing, setIsProcessing] = useState(false)
+
   // Initialize the ImageSegmenter
   useEffect(() => {
-    const initializeSegmenter = async () => {
+    const initializeVision = async () => {
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
       )
+
+      // Your existing segmenter initialization
       const imageSegmenter = await ImageSegmenter.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath: "/selfie_segmenter_landscape.tflite",  // Using local file from public folder
@@ -30,9 +42,21 @@ function App() {
         outputCategoryMask: true,
         outputConfidenceMasks: false
       })
+
+      const gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
+          delegate: "GPU"
+        },
+        numHands: 2,
+        runningMode: "VIDEO",
+        minHandDetectionConfidence: 0.3,
+      });
+
       setSegmenter(imageSegmenter)
+      setGestureRecognizer(gestureRecognizer)
     }
-    initializeSegmenter()
+    initializeVision()
   }, [])
 
   // Update texture every frame
@@ -41,6 +65,13 @@ function App() {
       if (canvasTexture && canvasBgTexture) {
         canvasTexture.needsUpdate = true
         canvasBgTexture.needsUpdate = true
+      }
+
+      if (isProcessing) {
+        if (frame % 3 === 0) {
+          processFrame()
+        }
+        frame++
       }
     })
 
@@ -54,7 +85,16 @@ function App() {
           <planeGeometry args={[16, 9]} />
           <meshBasicMaterial side={THREE.DoubleSide} map={canvasBgTexture || undefined} transparent opacity={1} />
         </mesh>
-
+        {/* <ExplosionConfetti
+          position={[-2, 1, -4]}
+          numberOfExplosions={1}
+          colorsArray={['#FF3366', '#33FF66', '#3366FF', '#FFCC00', '#FF33FF', '#00FFCC']}
+          particleAmount={500}
+          particleSize={0.7}
+          spreaAreadRadius={1}
+          contettiDuration={50}
+          explosionCount={Infinity}
+        /> */}
         {/* <MovingSpheres count={100} z={-1} color="red" opacity={1} /> */}
         {/* <MovingSpheres count={100} z={1} color="green" opacity={0.5} /> */}
       </>
@@ -75,7 +115,7 @@ function App() {
   }
 
   const processFrame = () => {
-    if (!videoRef.current || !outputCanvasRef.current || !outputBgRef.current || !segmenter || !hasPermission) return
+    if (!videoRef.current || !outputCanvasRef.current || !outputBgRef.current || !segmenter || !gestureRecognizer || !hasPermission) return
 
     const outputCtx = outputCanvasRef.current.getContext('2d', { willReadFrequently: true })
     const outputBgCtx = outputBgRef.current.getContext('2d', { willReadFrequently: true })
@@ -89,12 +129,63 @@ function App() {
     outputBgRef.current.width = width
     outputBgRef.current.height = height
 
+    // outputCtx.clearRect(0, 0, width, height)
+    // outputBgCtx.clearRect(0, 0, width, height)
+
     // Draw original video frame to both canvases
     outputCtx.drawImage(videoRef.current, 0, 0)
     outputBgCtx.drawImage(videoRef.current, 0, 0)
+
     try {
-      // Process frame with MediaPipe
+      // Process segmentation
       const segmentation = segmenter.segmentForVideo(videoRef.current, performance.now())
+
+      // Add gesture recognition
+      // const gestureResult = gestureRecognizer.recognizeForVideo(videoRef.current, performance.now())
+      const gestureResult = gestureRecognizer.recognizeForVideo(videoRef.current, performance.now())
+      if (gestureResult.gestures && gestureResult.gestures.length > 0) {
+        let leftGesture = '';
+        let rightGesture = '';
+
+        gestureResult.gestures.forEach((gestureArray, handIndex) => {
+          if (gestureArray.length > 0) {
+            const gesture = gestureArray[0]; // Get the highest confidence gesture for this hand
+            if (handIndex === 0) {
+              leftGesture = gesture.categoryName;
+            } else if (handIndex === 1) {
+              rightGesture = gesture.categoryName;
+            }
+          }
+        });
+
+        setGLeft(leftGesture || 'No Gesture');
+        setGRight(rightGesture || 'No Gesture');
+      }
+      // if (gestureResult.landmarks) {
+      //   // Draw landmarks on the canvas
+      //   gestureResult.landmarks.forEach(landmarks => {
+      //     landmarks.forEach(landmark => {
+      //       outputCtx.beginPath()
+      //       outputCtx.arc(
+      //         landmark.x * outputCanvasRef.current!.width,
+      //         landmark.y * outputCanvasRef.current!.height,
+      //         2,
+      //         0,
+      //         2 * Math.PI
+      //       )
+      //       outputCtx.fillStyle = 'yellow'
+      //       outputCtx.fill()
+      //     })
+      //   })
+
+      //   // Optionally log recognized gestures
+      //   if (gestureResult.gestures.length > 0) {
+      //     const gesture = gestureResult.gestures[0][0]
+      //     console.log(`Detected gesture: ${gesture.categoryName}, score: ${gesture.score}`)
+      //   }
+      // }
+
+      // Process output canvas (transparent background)
       const mask = segmentation.categoryMask?.getAsFloat32Array()
       if (segmentation) {
 
@@ -131,9 +222,6 @@ function App() {
     } catch (error) {
       console.error('Error processing frame:', error)
     }
-
-
-    requestAnimationFrame(processFrame)
   }
 
   // Clean up resources when component unmounts
@@ -142,8 +230,11 @@ function App() {
       if (segmenter) {
         segmenter.close()
       }
+      if (gestureRecognizer) {
+        gestureRecognizer.close()
+      }
     }
-  }, [segmenter])
+  }, [segmenter, gestureRecognizer])
 
   const toggleProcessing = () => {
     if (outputCanvasRef.current && outputBgRef.current) {
@@ -159,12 +250,16 @@ function App() {
       bgTex.format = THREE.RGBAFormat
       bgTex.needsUpdate = true
       setCanvasBgTexture(bgTex)
-      processFrame()
+      setIsProcessing(true)
     }
   }
 
   return (
-    <div className='min-h-screen bg-gray-900 flex flex-col items-center justify-center'>
+    <div className='min-h-screen bg-gray-900 flex flex-col gap-2 items-center justify-center'>
+      <div className='text-center flex gap-4'>
+        <span className='bg-yellow-800 text-yellow-100 p-2 rounded-lg text-xl font-bold'>Left: {gLeft}</span>
+        <span className='bg-yellow-800 text-yellow-100 p-2 rounded-lg text-xl font-bold'>Right: {gRight}</span>
+      </div>
       <div className=' text-center'>
         <button
           onClick={startCamera}
@@ -192,16 +287,19 @@ function App() {
             autoPlay
             playsInline
             className='absolute w-full h-full object-contain'
+            style={{ transform: 'scaleX(-1)' }}
           />
         </div>
 
         {/* Processed Output */}
         <div className={`relative w-[480px] h-[270px] rounded-lg overflow-hidden bg-red-500`}>
           <canvas
+            style={{ transform: 'scaleX(-1)' }}
             ref={outputCanvasRef}
             className='absolute w-full h-full object-contain invisible'
           />
           <canvas
+            style={{ transform: 'scaleX(-1)' }}
             ref={outputBgRef}
             className='absolute w-full h-full object-contain'
           />
@@ -211,6 +309,7 @@ function App() {
       {/* R3F Canvas */}
       <div className={`mt-4 w-[480px] h-[270px] rounded-lg overflow-hidden`}>
         <Canvas
+          style={{ transform: 'scaleX(-1)' }}
           orthographic
           camera={{ zoom: 30, position: [0, 0, 2] }}
         >
